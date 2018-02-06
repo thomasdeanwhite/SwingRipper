@@ -1,5 +1,6 @@
 package com.thomasdeanwhite.swingripper;
 
+import javax.swing.tree.DefaultMutableTreeNode;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -7,11 +8,15 @@ import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.sql.SQLException;
+import java.util.Scanner;
 import java.util.jar.Attributes;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
 
 public class SwingRipper {
+
+    public static String JAR_FILE = "";
 
     public static void main(String[] args) {
         if (args.length == 0) {
@@ -20,6 +25,8 @@ public class SwingRipper {
         String jar = args[0];
 
         File path = new File(jar);
+
+        JAR_FILE = jar.substring(jar.lastIndexOf("/")+1);
 
         if (!path.exists()) {
             throw new IllegalArgumentException("args[0] should be a valid jar file");
@@ -77,6 +84,50 @@ public class SwingRipper {
 
         } catch (Exception e) {
             e.printStackTrace();
+        }
+
+        String input = "";
+
+        Scanner scanner = new Scanner(System.in);
+
+        while (!(input=scanner.nextLine()).equals("q")){
+            try {
+                String[] command = input.split(" ");
+
+                String cmd = command[0];
+
+                String param = "";
+
+                if (command.length > 1) {
+                    param = command[1];
+                }
+
+                switch (cmd) {
+                    case "refresh":
+                        ripperFrame.updateWindows();
+                        break;
+                    case "rip":
+                        try {
+                            ripperFrame.rip();
+                        } catch (SQLException e) {
+                            e.printStackTrace();
+                        }
+                        break;
+                    case "select":
+                        ripperFrame.frames.getSelectionModel().clearSelection();
+                        try {
+                            int row = Integer.parseInt(param);
+                            ripperFrame.frames.addSelectionRow(row);
+                            ripperFrame.frames.expandRow(row);
+                        } catch (NumberFormatException e) {
+                            System.err.println(e.getMessage());
+                        }
+                }
+
+                ripperFrame.refresh();
+            } catch (Exception e){
+                e.printStackTrace();
+            }
         }
     }
 
