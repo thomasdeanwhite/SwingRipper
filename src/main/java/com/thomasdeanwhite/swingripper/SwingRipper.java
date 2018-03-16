@@ -1,14 +1,17 @@
 package com.thomasdeanwhite.swingripper;
 
 import javax.swing.tree.DefaultMutableTreeNode;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Scanner;
 import java.util.jar.Attributes;
 import java.util.jar.JarFile;
@@ -45,10 +48,39 @@ public class SwingRipper {
         Attributes attrs = manifest.getMainAttributes();
         String mainClass = attrs.getValue("Main-Class");
 
+        String classPath = attrs.getValue("Class-Path");
+
         URLClassLoader child = null;
         try {
-            URL url = new URL("file:///" + path.getAbsolutePath());
-            child = new URLClassLoader(new URL[]{url}, SwingRipper.class.getClassLoader());
+
+            System.out.println("Using jar: " + path.getAbsolutePath());
+
+            URL url = new URL("file:///" + path.getAbsolutePath().replace(" ", "%20"));
+
+            ArrayList<URL> urls = new ArrayList<>();
+
+            if (classPath != null && classPath.length() > 0) {
+
+                System.out.print("Enhancing Class-Path: ");
+                String[] jars = classPath.split(" ");
+
+                for (String s : jars) {
+                    File f = new File(s.replace("./", ""));
+                    System.out.println(f.getAbsolutePath());
+                    URL jarUrl = new URL("file:///" +  f.getAbsolutePath().replace(" ", "%20"));
+                    urls.add(jarUrl);
+                }
+
+                System.out.println();
+            }
+
+            urls.add(url);
+
+            URL[] urlArray = new URL[urls.size()];
+
+            urls.toArray(urlArray);
+
+            child = new URLClassLoader(urlArray, SwingRipper.class.getClassLoader());
         } catch (MalformedURLException e) {
             e.printStackTrace();
         }
@@ -66,10 +98,24 @@ public class SwingRipper {
                         Object result = method.invoke(null, new Object[]{new String[]{}});
 
                         System.out.println("Method returned with exit status: " + result);
-                    } catch (IllegalAccessException e) {
+                    } catch (Exception e) {
                         e.printStackTrace();
-                    } catch (InvocationTargetException e) {
-                        e.printStackTrace();
+                        try {
+
+                            Process p = new ProcessBuilder("java", "-jar " + jar).start();
+
+                            String line = null;
+
+                            BufferedReader input =
+                                    new BufferedReader
+                                            (new InputStreamReader(p.getInputStream()));
+                            while ((line = input.readLine()) != null) {
+                                System.out.println(line);
+                            }
+                            input.close();
+                        } catch (IOException e1) {
+                            e1.printStackTrace();
+                        }
                     }
                 }
             });
@@ -108,7 +154,11 @@ public class SwingRipper {
                         break;
                     case "rip":
                         try {
-                            ripperFrame.rip();
+                            if (param.length() > 0) {
+                                ripperFrame.rip(param);
+                            } else {
+                                ripperFrame.rip();
+                            }
                         } catch (SQLException e) {
                             e.printStackTrace();
                         }
@@ -122,6 +172,9 @@ public class SwingRipper {
                         } catch (NumberFormatException e) {
                             System.err.println(e.getMessage());
                         }
+                        break;
+                    default:
+                        System.err.println("Unrecognised command: " + cmd);
                 }
 
                 ripperFrame.refresh();

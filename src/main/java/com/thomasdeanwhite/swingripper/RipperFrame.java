@@ -3,6 +3,7 @@ package com.thomasdeanwhite.swingripper;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreeSelectionModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
@@ -12,6 +13,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 import java.sql.*;
+import java.util.Properties;
 
 public class RipperFrame extends JFrame {
 
@@ -43,10 +45,12 @@ public class RipperFrame extends JFrame {
 
     public static HashMap<Integer, Component> components;
 
+
     DefaultMutableTreeNode root = new DefaultMutableTreeNode("com.thomasdeanwhite.swingripper.SwingRipper");
 
+    DefaultTreeModel tree = new DefaultTreeModel(root);
 
-    JTree frames = new JTree(root);
+    JTree frames = new JTree(tree);
 
     JButton refresh = new JButton("Refresh");
 
@@ -54,11 +58,13 @@ public class RipperFrame extends JFrame {
 
     JButton rip = new JButton("Rip");
 
+    JButton walk = new JButton("Walk");
+
     JLabel status = new JLabel("Ready");
 
     JTextField dataLocation = new JTextField();
 
-    public RipperFrame(){
+    public RipperFrame() {
         super(TITLE);
         setLayout(new BorderLayout());
 
@@ -120,6 +126,21 @@ public class RipperFrame extends JFrame {
             }
         });
 
+        walk.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    status.setText("Walking...");
+                    refresh();
+                    RipperFrame.this.rip();
+                    status.setText("Walking... Done!");
+                    refresh();
+                } catch (SQLException e1) {
+                    e1.printStackTrace();
+                }
+            }
+        });
+
         JPanel actionContainer = new JPanel();
 
         actionContainer.add(refresh);
@@ -140,20 +161,20 @@ public class RipperFrame extends JFrame {
         setVisible(true);
     }
 
-    public void setDefaultDataDir(String dir){
-        if (!dir.endsWith("/")){
+    public void setDefaultDataDir(String dir) {
+        if (!dir.endsWith("/")) {
             dir += "/";
         }
         dataLocation.setText(dir);
     }
 
-    public DefaultMutableTreeNode getSelected(){
+    public DefaultMutableTreeNode getSelected() {
         DefaultMutableTreeNode selected = (DefaultMutableTreeNode) frames.getLastSelectedPathComponent();
 
         return selected;
     }
 
-    public void highlightComponent(){
+    public void highlightComponent() {
         String selected = getSelected().toString();
 
         int componentNum = Integer.parseInt(selected.split(" - ")[0]);
@@ -168,187 +189,258 @@ public class RipperFrame extends JFrame {
 
     public void recursiveParse(Component c, int[] positions, int imageId, Statement stmt) throws SQLException {
 
-        if(c instanceof Container) {
+        if (c instanceof Container) {
+            if (c instanceof JTabbedPane) {
+                JTabbedPane pane = (JTabbedPane) c;
+                int count = pane.getTabCount();
+                for (int i = 0; i < count; i++) {
+                    Rectangle bounds = pane.getBoundsAt(i);
+                    Rectangle r = new Rectangle(bounds.x + pane.getLocationOnScreen().x - 4,
+                            bounds.y + pane.getLocationOnScreen().y - 4,
+                            bounds.width + 8, bounds.height + 8);
+
+                    float[] dimensions = new float[]{
+                            (r.getLocation().x - positions[0] - 4) / (float) positions[2],
+                            (r.getLocation().y - positions[1] - 4) / (float) positions[3],
+                            (float) (((r.getLocation().x - positions[0] + 8) + r.getWidth()) / (float) positions[2]),
+                            (float) (((r.getLocation().y - positions[1] + 8) + r.getHeight()) / (float) positions[3]),
+                    };
+
+                    String labelType = "tabs";
+
+                    ResultSet rs = stmt.executeQuery(String.format("SELECT LabelTypeId FROM label_types WHERE LabelName='%s'", labelType));
+
+                    int labelTypeId = 0;
+
+                    if (rs.next()) {
+                        labelTypeId = rs.getInt(1);
+                    } else {
+                        labelTypeId = stmt.executeUpdate(String.format("INSERT INTO label_types (LabelName) VALUES ('%s');", labelType));
+
+                        rs = stmt.executeQuery(String.format("SELECT LabelTypeId FROM label_types WHERE LabelName='%s'", labelType));
+
+                        if (rs.next()) {
+                            labelTypeId = rs.getInt(1);
+                        }
+                    }
+
+                    String query = String.format("INSERT INTO labels (Source, Confidence, ImageId, " +
+                                    "XMin, XMax, YMin, YMax, LabelType) VALUES ('%s', '%d', '%d', '%f', '%f', '%f', '%f'," +
+                                    "'%d');", "unverified", 0, imageId, dimensions[0], dimensions[2], dimensions[1],
+                            dimensions[3], labelTypeId);
+
+                    stmt.executeUpdate(query);
+
+                }
+            }
             Container conts = ((Container) c);
 
             for (Component cont : conts.getComponents()) {
                 try {
                     recursiveParse(cont, positions, imageId, stmt);
-                } catch (IllegalComponentStateException e){
+                } catch (IllegalComponentStateException e) {
                     //component is invisible!
                 }
             }
         }
 
         if (c.getWidth() == 0 || c.getHeight() == 0 || !c.isVisible() || !c.isDisplayable() ||
-                !c.isEnabled()){
+                !c.isEnabled()) {
             return;
         }
 
         String labelType = null;
 
-        for (Class cls : CLASS_MAP.keySet()){
-            if (cls.isInstance(c)){
+        for (Class cls : CLASS_MAP.keySet()) {
+            if (cls.isInstance(c)) {
                 labelType = CLASS_MAP.get(cls);
             }
         }
 
-        if (labelType == null){
+        if (labelType == null) {
             return;
         }
 
-        if (c instanceof JTextField){
-            if (!((JTextField)c).isEditable()){
+        if (c instanceof JTextField) {
+            if (!((JTextField) c).isEditable()) {
                 return;
             }
         }
 
         float[] dimensions = new float[]{
-                (c.getLocationOnScreen().x-positions[0]-4)/(float)positions[2],
-                (c.getLocationOnScreen().y-positions[1]-4)/(float)positions[3],
-                ((c.getLocationOnScreen().x-positions[0]+8) + c.getWidth())/(float)positions[2],
-                ((c.getLocationOnScreen().y-positions[1]+8) + c.getHeight())/(float)positions[3],
+                (c.getLocationOnScreen().x - positions[0] - 4) / (float) positions[2],
+                (c.getLocationOnScreen().y - positions[1] - 4) / (float) positions[3],
+                ((c.getLocationOnScreen().x - positions[0] + 8) + c.getWidth()) / (float) positions[2],
+                ((c.getLocationOnScreen().y - positions[1] + 8) + c.getHeight()) / (float) positions[3],
         };
 
-        ResultSet rs=stmt.executeQuery(String.format("SELECT LabelTypeId FROM label_types WHERE LabelName='%s'", labelType));
+        ResultSet rs = stmt.executeQuery(String.format("SELECT LabelTypeId FROM label_types WHERE LabelName='%s'", labelType));
 
         int labelTypeId = 0;
 
-        if (rs.next()){
+        if (rs.next()) {
             labelTypeId = rs.getInt(1);
         } else {
             labelTypeId = stmt.executeUpdate(String.format("INSERT INTO label_types (LabelName) VALUES ('%s');", labelType));
 
-            rs=stmt.executeQuery(String.format("SELECT LabelTypeId FROM label_types WHERE LabelName='%s'", labelType));
+            rs = stmt.executeQuery(String.format("SELECT LabelTypeId FROM label_types WHERE LabelName='%s'", labelType));
 
             if (rs.next()) {
                 labelTypeId = rs.getInt(1);
             }
         }
 
-        stmt.executeUpdate(String.format("INSERT INTO labels (Source, Confidence, ImageId, " +
+        String query = String.format("INSERT INTO labels (Source, Confidence, ImageId, " +
                         "XMin, XMax, YMin, YMax, LabelType) VALUES ('%s', '%d', '%d', '%f', '%f', '%f', '%f'," +
                         "'%d');", "unverified", 0, imageId, dimensions[0], dimensions[2], dimensions[1],
-                dimensions[3], labelTypeId));
+                dimensions[3], labelTypeId);
+
+        stmt.executeUpdate(query);
 
     }
 
 
     public void rip() throws SQLException {
-        Connection con = DriverManager.getConnection(
-                    "jdbc:mysql://" + Preferences.LOCATION + ":" + Preferences.PORT + "/" + Preferences.DB,
-                    Preferences.USER, Preferences.PASSWORD);
+        rip("");
+    }
 
+    public void rip(String extension) throws SQLException {
         String selected = getSelected().toString();
         Window[] windows = Window.getWindows();
         for (Window w : windows) {
             String title = "";
 
             // parse window
-            Container cont = (Container)SwingUtilities.getRoot(w);
+            Container cont = (Container) SwingUtilities.getRoot(w);
 
-            if (cont instanceof JFrame){
-                title = ((JFrame)cont).getTitle();
-            } else if (cont instanceof JOptionPane){
-                title = ((JOptionPane)cont).getMessage().toString();
-            } else if (cont instanceof JDialog){
-                title = ((JDialog)cont).getTitle();
+            if (cont instanceof JFrame) {
+                title = ((JFrame) cont).getTitle();
+            } else if (cont instanceof JOptionPane) {
+                title = ((JOptionPane) cont).getMessage().toString();
+            } else if (cont instanceof JDialog) {
+                title = ((JDialog) cont).getTitle();
             }
 
             title = SwingRipper.JAR_FILE + " - " + title;
 
             if (w.isVisible() && title.equals(selected)) {
-
-                cont.repaint();
-
-                try {
-                    Robot robot = new Robot();
-
-                    Point pos = cont.getLocationOnScreen();
-
-                    int[] positions = new int[]{pos.x, pos.y, cont.getWidth(), cont.getHeight()};
-
-                    BufferedImage screenshot = robot.createScreenCapture(new Rectangle(positions[0], positions[1],
-                            positions[2], positions[3]));
-
-                    String source = "localhost?application=" + title.replace(" ", "_").
-                            replace(".", "");
-
-                    Statement stmt=con.createStatement();
-                    ResultSet rs=stmt.executeQuery(String.format("SELECT * FROM images WHERE Source='%s'", source));
-
-                    boolean exists = false;
-
-                    while(rs.next()){
-                        exists = true;
-                    }
-
-                    String dataset = "train";
-
-                    float num = (float)Math.random();
-
-                    if (num < 0.1){
-                        dataset = "train";
-                    } else if (num < 0.15) {
-                        dataset = "validate";
-                    }
-
-                    if (!exists){
-
-                        int maxImage = 0;
-
-                        rs=stmt.executeQuery(String.format("SELECT * FROM images ORDER BY ImageID DESC;"));
-
-                        rs.next();
-
-                        maxImage = rs.getInt(1);
-
-                        int imageId = (maxImage+1);
-
-                        String filename = "images/" + imageId + ".png";
-
-                        stmt.executeUpdate(String.format("INSERT INTO images (Subset, File, Width, Height, Source) " +
-                                "VALUES ('%s', '%s', '%d', '%d', '%s');", dataset, filename,
-                                screenshot.getWidth(), screenshot.getHeight(), source));
-
-
-                        String output = dataLocation.getText();
-
-                        if (!output.endsWith("/")){
-                            output += "/";
-                        }
-
-                        output += filename;
-
-                        ImageIO.write(screenshot, "png", new File(output));
-
-
-                        for (Component c : cont.getComponents()){
-
-                            recursiveParse(c, positions, imageId, stmt);
-                        }
-                    }
-                } catch (AWTException e) {
-                    e.printStackTrace();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-
-                return;
+                rip(extension, cont, "swing", "application=");
             }
-        }
-        System.err.println("Cannot find window " + selected + ". Is a top level window selected?");
 
+        }
     }
 
-    public void refresh(){
+    public void rip(String extension, Container cont, String dataSource, String fileLocation) throws SQLException {
+        Connection con = DriverManager.getConnection(
+                "jdbc:mysql://" + Preferences.LOCATION + ":" + Preferences.PORT + "/" + Preferences.DB,
+                Preferences.USER, Preferences.PASSWORD);
+
+        String title = "";
+
+        if (cont instanceof JFrame) {
+            title = ((JFrame) cont).getTitle();
+        } else if (cont instanceof JOptionPane) {
+            title = ((JOptionPane) cont).getMessage().toString();
+        } else if (cont instanceof JDialog) {
+            title = ((JDialog) cont).getTitle();
+        }
+
+        title = SwingRipper.JAR_FILE + " - " + title;
+
+        cont.repaint();
+
+        try {
+            Robot robot = new Robot();
+
+            Point pos = cont.getLocationOnScreen();
+
+            int[] positions = new int[]{pos.x, pos.y, cont.getWidth(), cont.getHeight()};
+
+            BufferedImage screenshot = robot.createScreenCapture(new Rectangle(positions[0], positions[1],
+                    positions[2], positions[3]));
+
+            String property = System.getProperty("swing.defaultlaf");
+
+            if (property != null && property.length() > 0) {
+                extension += "-" + property;
+            }
+
+            if (extension.length() > 0 && !(extension.startsWith("-"))) {
+                extension = "-" + extension;
+            }
+
+            String source = "localhost?" + fileLocation + title.replace(" ", "_").
+                    replace(".", "").replace("'", ".apos.") + extension;
+
+            Statement stmt = con.createStatement();
+            ResultSet rs = stmt.executeQuery(String.format("SELECT * FROM images WHERE Source='%s'", source));
+
+            boolean exists = false;
+
+            while (rs.next()) {
+                exists = true;
+            }
+
+            String dataset = "train";
+
+            float num = (float) Math.random();
+
+            if (num < 0.1) {
+                dataset = "test";
+            } else if (num < 0.2) {
+                dataset = "validate";
+            }
+
+            if (!exists) {
+
+                int maxImage = 0;
+
+                rs = stmt.executeQuery(String.format("SELECT * FROM images ORDER BY ImageID DESC;"));
+
+                rs.next();
+
+                maxImage = rs.getInt(1);
+
+                int imageId = (maxImage + 1);
+
+                String filename = "images/" + imageId + ".png";
+
+                stmt.executeUpdate(String.format("INSERT INTO images (Subset, File, Width, Height, Source, Dataset) " +
+                                "VALUES ('%s', '%s', '%d', '%d', '%s', '%s');", dataset, filename,
+                        screenshot.getWidth(), screenshot.getHeight(), source, dataSource));
+
+
+                String output = dataLocation.getText();
+
+                if (!output.endsWith("/")) {
+                    output += "/";
+                }
+
+                output += filename;
+
+                ImageIO.write(screenshot, "png", new File(output));
+
+
+                for (Component c : cont.getComponents()) {
+
+                    recursiveParse(c, positions, imageId, stmt);
+                }
+            }
+        } catch (AWTException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void refresh() {
         invalidate();
         repaint();
     }
 
     private int componentCount = 0;
 
-    public void recursiveSearch(Component c, DefaultMutableTreeNode node){
+    public void recursiveSearch(Component c, DefaultMutableTreeNode node) {
         DefaultMutableTreeNode con = new DefaultMutableTreeNode(componentCount + " - " + c.getClass().toString());
         node.add(con);
 
@@ -357,8 +449,21 @@ public class RipperFrame extends JFrame {
         componentCount++;
 
 
-        if(c instanceof Container) {
+        if (c instanceof Container) {
             Container conts = ((Container) c);
+
+            if (c instanceof JTabbedPane) {
+                JTabbedPane pane = (JTabbedPane) c;
+                int count = pane.getTabCount();
+                for (int i = 0; i < count; i++) {
+                    String tab = pane.getTitleAt(i);
+                    Rectangle bounds = pane.getBoundsAt(i);
+                    bounds = new Rectangle(bounds.x + pane.getLocationOnScreen().x - 4,
+                            bounds.y + pane.getLocationOnScreen().y - 4,
+                            bounds.width + 8, bounds.height + 8);
+                    System.out.print(tab + bounds);
+                }
+            }
 
             for (Component cont : conts.getComponents()) {
                 recursiveSearch(cont, con);
@@ -366,33 +471,36 @@ public class RipperFrame extends JFrame {
         }
     }
 
-    public void updateWindows(){
+    public void updateWindows() {
         Window[] windows = Window.getWindows();
 
         componentCount = 0;
         components.clear();
 
-        for (Window w : windows){
-            if (w.isVisible()){
+        root.removeAllChildren();
+
+        for (Window w : windows) {
+            if (w.isVisible()) {
 
                 String title = "";
 
                 // parse window
-                Container cont = (Container)SwingUtilities.getRoot(w);
+                Container cont = (Container) SwingUtilities.getRoot(w);
 
-                if (cont instanceof JFrame){
-                    title = ((JFrame)cont).getTitle();
-                } else if (cont instanceof JOptionPane){
-                    title = ((JOptionPane)cont).getMessage().toString();
-                } else if (cont instanceof JDialog){
-                    title = ((JDialog)cont).getTitle();
+                if (cont instanceof JFrame) {
+                    title = ((JFrame) cont).getTitle();
+                } else if (cont instanceof JOptionPane) {
+                    title = ((JOptionPane) cont).getMessage().toString();
+                } else if (cont instanceof JDialog) {
+                    title = ((JDialog) cont).getTitle();
                 }
 
                 if (!title.equals(TITLE)) {
                     DefaultMutableTreeNode window = new DefaultMutableTreeNode(SwingRipper.JAR_FILE + " - " + title);
                     root.add(window);
 
-                    for (Component c : cont.getComponents()){
+
+                    for (Component c : cont.getComponents()) {
 
                         recursiveSearch(c, window);
                     }
@@ -400,5 +508,7 @@ public class RipperFrame extends JFrame {
                 }
             }
         }
+        tree.reload();
+        frames.collapseRow(0);
     }
 }
