@@ -27,7 +27,7 @@ public class RipperFrame extends JFrame {
         CLASS_MAP.put(JTextArea.class, "text_field");
         CLASS_MAP.put(JComboBox.class, "combo_box");
         CLASS_MAP.put(JToggleButton.class, "toggle_button");
-        CLASS_MAP.put(JMenu.class, "menu");
+        CLASS_MAP.put(JMenuBar.class, "menu");
         CLASS_MAP.put(JMenuItem.class, "menu_item");
         CLASS_MAP.put(JList.class, "list");
         CLASS_MAP.put(JTree.class, "tree");
@@ -188,7 +188,9 @@ public class RipperFrame extends JFrame {
     }
 
     public void recursiveParse(Component c, int[] positions, int imageId, Statement stmt) throws SQLException {
-
+        if (!c.isVisible() || c.getLocation().x >= c.getParent().getWidth() || c.getLocation().y > c.getParent().getHeight()){
+            return;
+        }
         if (c instanceof Container) {
             if (c instanceof JTabbedPane) {
                 JTabbedPane pane = (JTabbedPane) c;
@@ -334,7 +336,11 @@ public class RipperFrame extends JFrame {
         Connection con = DriverManager.getConnection(
                 "jdbc:mysql://" + Preferences.LOCATION + ":" + Preferences.PORT + "/" + Preferences.DB,
                 Preferences.USER, Preferences.PASSWORD);
+        rip(extension, cont, dataSource, fileLocation, con);
+        con.close();
+    }
 
+    public void rip(String extension, Container cont, String dataSource, String fileLocation, Connection con) throws SQLException {
         String title = "";
 
         if (cont instanceof JFrame) {
@@ -381,15 +387,9 @@ public class RipperFrame extends JFrame {
                 exists = true;
             }
 
-            String dataset = "train";
+            String dataset = getRandomDataset();
 
-            float num = (float) Math.random();
 
-            if (num < 0.1) {
-                dataset = "test";
-            } else if (num < 0.2) {
-                dataset = "validate";
-            }
 
             if (!exists) {
 
@@ -433,6 +433,20 @@ public class RipperFrame extends JFrame {
         }
     }
 
+    public String getRandomDataset(){
+
+        String dataset = "train";
+
+        float num = (float) Math.random();
+
+        if (num < 0.1) {
+            dataset = "test";
+        } else if (num < 0.2) {
+            dataset = "validate";
+        }
+        return dataset;
+    }
+
     public void refresh() {
         invalidate();
         repaint();
@@ -461,7 +475,6 @@ public class RipperFrame extends JFrame {
                     bounds = new Rectangle(bounds.x + pane.getLocationOnScreen().x - 4,
                             bounds.y + pane.getLocationOnScreen().y - 4,
                             bounds.width + 8, bounds.height + 8);
-                    System.out.print(tab + bounds);
                 }
             }
 
