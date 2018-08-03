@@ -3,6 +3,7 @@ package com.thomasdeanwhite.swingripper;
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
 import java.awt.*;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -47,9 +48,9 @@ public class FrameGenerator {
 //        }
     }
 
-    private static int MAX_NUMBER_COMPONENTS = 20;
-    private static int MAX_WIDTH = 1024;
-    private static int MAX_HEIGHT = 768;
+    private static int MAX_NUMBER_COMPONENTS = 50;
+    private static int MAX_WIDTH = 1280;
+    private static int MAX_HEIGHT = 1280;
 
     private static int MIN_NUM_COMPONENTS = 10;
 
@@ -94,9 +95,9 @@ public class FrameGenerator {
 
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
 
-        while (components < MIN_NUM_COMPONENTS || (components < MAX_NUMBER_COMPONENTS && random.nextDouble() < Math.pow(0.95, components))){
+        while (components < MIN_NUM_COMPONENTS || (components < MAX_NUMBER_COMPONENTS && random.nextDouble() < Math.pow(0.99, components))){
             String value = arrayList.get(components);
-            switch(random.nextInt(8)){
+            switch(random.nextInt(10)){
                 case 0: //button
                     JButton b = new JButton(value);
                     add(jframe, b);
@@ -104,7 +105,8 @@ public class FrameGenerator {
                 case 1: //text field
                     if (random.nextDouble() < 0.3){
                         JTextArea jt = new JTextArea(value);
-                        jt.setSize((MIN_WIDTH/3)+random.nextInt(MIN_WIDTH/3), (MIN_HEIGHT/3)+random.nextInt(MIN_HEIGHT/3));
+                        System.out.println("TA");
+                        jt.setMargin(new Insets(10,10,10,10));
                         add(jframe, jt);
                     } else {
                         JTextField jt = new JTextField(value);
@@ -244,7 +246,18 @@ public class FrameGenerator {
                 case 7: //tabs
                     JTabbedPane tabs = new JTabbedPane();
 
-                    tabs.setPreferredSize(new Dimension(100, 100));
+                    float num = random.nextFloat();
+
+                    if (num < 0.25)
+                        tabs.setTabPlacement(JTabbedPane.TOP);
+                    else if (num < 0.5)
+                        tabs.setTabPlacement(JTabbedPane.LEFT);
+                    else if (num < 0.75)
+                        tabs.setTabPlacement(JTabbedPane.RIGHT);
+                    else
+                        tabs.setTabPlacement(JTabbedPane.BOTTOM);
+
+                    tabs.setPreferredSize(new Dimension(100+random.nextInt(300), 100+random.nextInt(300)));
 
                     int listTab = random.nextInt(arrayList.size()-21);
                     List<String> tList = arrayList.subList(listTab, listTab + random.nextInt(20));
@@ -253,23 +266,36 @@ public class FrameGenerator {
                         tabs.addTab(tList.get(i++), getRandomComponent());
                     }
 
+
+
                     add(jframe, tabs);
                     break;
+                case 8:
+                    JLabel l = new JLabel(value);
+                    add(jframe, l);
+                case 9:
+                    JPanel jp = new JPanel();
+                    add(jframe, jp);
 
             }
 
             components++;
         }
 
-        jframe.pack();
+        //jframe.pack();
         return jframe;
     }
 
-    private static final String[] BORDER_LAYOUTS = {BorderLayout.PAGE_START,
-        BorderLayout.PAGE_END, BorderLayout.LINE_START, BorderLayout.LINE_END,
-        BorderLayout.CENTER};
+    private static final String[] BORDER_LAYOUTS = {BorderLayout.NORTH,
+    BorderLayout.SOUTH, BorderLayout.EAST, BorderLayout.WEST, BorderLayout.CENTER};
 
     public void add(JFrame jframe, JComponent jc){
+
+        int x = 50+random.nextInt(200);
+                int y = 50+random.nextInt(200);
+
+        jc.setMinimumSize(new Dimension(x, y));
+
         switch(LAYOUT) {
             case FLOW:
                 jframe.add(jc);
@@ -296,7 +322,7 @@ public class FrameGenerator {
 
         while (components < MIN_NUM_COMPONENTS || (components < MAX_NUMBER_COMPONENTS && random.nextDouble() < Math.pow(0.95, components))){
             String value = arrayList.get(components);
-            switch(random.nextInt(7)){
+            switch(random.nextInt(8)){
                 case 0: //button
                     JButton b = new JButton(value);
                     c.add(b);
@@ -410,6 +436,9 @@ public class FrameGenerator {
                     }
                     c.add(tabs);
                     break;
+                case 7:
+                    JLabel l = new JLabel(value);
+                    c.add(l);
             }
 
             components++;
@@ -421,11 +450,27 @@ public class FrameGenerator {
     private static int[] TAB_PLACEMENTS = {JTabbedPane.LEFT, JTabbedPane.TOP, JTabbedPane.RIGHT, JTabbedPane.BOTTOM};
 
     public static void main(String args[]){
+        RipperFrame rf = new RipperFrame();
+
+        rf.setVisible(false);
+
         FrameGenerator fg = new FrameGenerator();
 
         JFrame jf = fg.generateRandomFrame();
 
         jf.setVisible(true);
+
+        jf.invalidate();
+
+        jf.repaint();
+
+        try {
+            rf.rip("lolol", jf, "swing_generated", "swing-generated");
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+
     }
 
 }

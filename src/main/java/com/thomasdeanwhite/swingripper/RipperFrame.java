@@ -74,6 +74,9 @@ public class RipperFrame extends JFrame {
         locationContainer.add(new JLabel("Data location:"));
 
         dataLocation.setPreferredSize(new Dimension(500, 30));
+
+        dataLocation.setText("/home/thomas/data");
+
         locationContainer.add(dataLocation);
 
         add(locationContainer, BorderLayout.NORTH);
@@ -267,11 +270,25 @@ public class RipperFrame extends JFrame {
             }
         }
 
+        int x = c.getLocationOnScreen().x;
+        int y = c.getLocationOnScreen().y;
+
+        int width = c.getWidth();
+        int height = c.getHeight();
+
+        if (width > c.getParent().getWidth()){
+            width = c.getParent().getWidth();
+        }
+
+        if (height > c.getParent().getHeight()){
+            height = c.getParent().getHeight();
+        }
+
         float[] dimensions = new float[]{
-                (c.getLocationOnScreen().x - positions[0] - 4) / (float) positions[2],
-                (c.getLocationOnScreen().y - positions[1] - 4) / (float) positions[3],
-                ((c.getLocationOnScreen().x - positions[0] + 8) + c.getWidth()) / (float) positions[2],
-                ((c.getLocationOnScreen().y - positions[1] + 8) + c.getHeight()) / (float) positions[3],
+                (x - positions[0] - 4) / (float) positions[2],
+                (y - positions[1] - 4) / (float) positions[3],
+                ((x - positions[0] + 8) + width) / (float) positions[2],
+                ((y - positions[1] + 8) + height) / (float) positions[3],
         };
 
         ResultSet rs = stmt.executeQuery(String.format("SELECT LabelTypeId FROM label_types WHERE LabelName='%s'", labelType));
