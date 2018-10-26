@@ -27,10 +27,11 @@ public class RipperFrame extends JFrame {
         CLASS_MAP.put(JTextArea.class, "text_field");
         CLASS_MAP.put(JComboBox.class, "combo_box");
         CLASS_MAP.put(JToggleButton.class, "toggle_button");
-        CLASS_MAP.put(JMenu.class, "menu");
+        CLASS_MAP.put(JMenuBar.class, "menu");
         CLASS_MAP.put(JMenuItem.class, "menu_item");
         CLASS_MAP.put(JList.class, "list");
         CLASS_MAP.put(JTree.class, "tree");
+        CLASS_MAP.put(JSlider.class, "slider");
 
         try {
             Class scrollbarClass = Class.forName("javax.swing.JScrollPane$ScrollBar");
@@ -75,7 +76,7 @@ public class RipperFrame extends JFrame {
 
         dataLocation.setPreferredSize(new Dimension(500, 30));
 
-        dataLocation.setText("/home/thomas/data");
+        dataLocation.setText("/home/thomas/work/GuiImages/public");
 
         locationContainer.add(dataLocation);
 
@@ -191,7 +192,9 @@ public class RipperFrame extends JFrame {
     }
 
     public void recursiveParse(Component c, int[] positions, int imageId, Statement stmt) throws SQLException {
-
+        if (!c.isVisible() || c.getLocation().x >= c.getParent().getWidth() || c.getLocation().y > c.getParent().getHeight()){
+            return;
+        }
         if (c instanceof Container) {
             if (c instanceof JTabbedPane) {
                 JTabbedPane pane = (JTabbedPane) c;
@@ -285,10 +288,10 @@ public class RipperFrame extends JFrame {
         }
 
         float[] dimensions = new float[]{
-                (x - positions[0] - 4) / (float) positions[2],
-                (y - positions[1] - 4) / (float) positions[3],
-                ((x - positions[0] + 8) + width) / (float) positions[2],
-                ((y - positions[1] + 8) + height) / (float) positions[3],
+                (x - positions[0]) / (float) positions[2],
+                (y - positions[1]) / (float) positions[3],
+                ((x - positions[0]) + width) / (float) positions[2],
+                ((y - positions[1]) + height) / (float) positions[3],
         };
 
         ResultSet rs = stmt.executeQuery(String.format("SELECT LabelTypeId FROM label_types WHERE LabelName='%s'", labelType));
@@ -351,7 +354,15 @@ public class RipperFrame extends JFrame {
         Connection con = DriverManager.getConnection(
                 "jdbc:mysql://" + Preferences.LOCATION + ":" + Preferences.PORT + "/" + Preferences.DB,
                 Preferences.USER, Preferences.PASSWORD);
+        rip(extension, cont, dataSource, fileLocation, con);
+        con.close();
+    }
 
+    public void rip(String extension, Container cont, String dataSource, String fileLocation, Connection con) throws SQLException {
+        rip(extension, cont, dataSource, fileLocation, con, "default");
+    }
+
+    public void rip(String extension, Container cont, String dataSource, String fileLocation, Connection con, String theme) throws SQLException {
         String title = "";
 
         if (cont instanceof JFrame) {
@@ -398,15 +409,9 @@ public class RipperFrame extends JFrame {
                 exists = true;
             }
 
-            String dataset = "train";
+            String dataset = getRandomDataset();
 
-            float num = (float) Math.random();
 
-            if (num < 0.1) {
-                dataset = "test";
-            } else if (num < 0.2) {
-                dataset = "validate";
-            }
 
             if (!exists) {
 
@@ -416,15 +421,20 @@ public class RipperFrame extends JFrame {
 
                 rs.next();
 
-                maxImage = rs.getInt(1);
-
+                try {
+                    maxImage = rs.getInt(1);
+                } catch (SQLException e){
+                    System.out.println(e.getMessage());
+                    // no rows in table
+                    maxImage = 0;
+                }
                 int imageId = (maxImage + 1);
 
                 String filename = "images/" + imageId + ".png";
 
-                stmt.executeUpdate(String.format("INSERT INTO images (Subset, File, Width, Height, Source, Dataset) " +
-                                "VALUES ('%s', '%s', '%d', '%d', '%s', '%s');", dataset, filename,
-                        screenshot.getWidth(), screenshot.getHeight(), source, dataSource));
+                stmt.executeUpdate(String.format("INSERT INTO images (Subset, File, Width, Height, Source, Dataset, Theme) " +
+                                "VALUES ('%s', '%s', '%d', '%d', '%s', '%s', '%s');", dataset, filename,
+                        screenshot.getWidth(), screenshot.getHeight(), source, dataSource, theme));
 
 
                 String output = dataLocation.getText();
@@ -439,7 +449,6 @@ public class RipperFrame extends JFrame {
 
 
                 for (Component c : cont.getComponents()) {
-
                     recursiveParse(c, positions, imageId, stmt);
                 }
             }
@@ -448,6 +457,20 @@ public class RipperFrame extends JFrame {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    public String getRandomDataset(){
+
+        String dataset = "train";
+
+        float num = (float) Math.random();
+
+        if (num < 0.1) {
+            dataset = "test";
+        } else if (num < 0.2) {
+            dataset = "validate";
+        }
+        return dataset;
     }
 
     public void refresh() {
@@ -475,10 +498,9 @@ public class RipperFrame extends JFrame {
                 for (int i = 0; i < count; i++) {
                     String tab = pane.getTitleAt(i);
                     Rectangle bounds = pane.getBoundsAt(i);
-                    bounds = new Rectangle(bounds.x + pane.getLocationOnScreen().x - 4,
-                            bounds.y + pane.getLocationOnScreen().y - 4,
-                            bounds.width + 8, bounds.height + 8);
-                    System.out.print(tab + bounds);
+                    bounds = new Rectangle(bounds.x + pane.getLocationOnScreen().x,
+                            bounds.y + pane.getLocationOnScreen().y,
+                            bounds.width, bounds.height);
                 }
             }
 
